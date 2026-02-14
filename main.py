@@ -3,11 +3,22 @@ import asyncio
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
 
 TOKEN = "8590754440:AAH4Xb_WuQVy2Z8a1oJEozpEtApByVtgxV8"
 
 bot = Bot(token=TOKEN)
-dp = Dispatcher()
+# Используем MemoryStorage для хранения состояний и задач (в памяти)
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
+
+# Временное хранилище задач в памяти (в продакшене лучше БД)
+user_tasks = {}
+
+class TaskStates(StatesGroup):
+    waiting_for_task_text = State()
 
 # --- Кнопки ---
 start_keyboard = ReplyKeyboardMarkup(
@@ -18,6 +29,7 @@ start_keyboard = ReplyKeyboardMarkup(
 main_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📅 Расписание"), KeyboardButton(text="👤 Мой профиль")],
+        [KeyboardButton(text="➕ Добавить задачу"), KeyboardButton(text="📋 Мои задачи")],
         [KeyboardButton(text="🔗 Ссылки"), KeyboardButton(text="📝 Заметки")],
         [KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")]
     ],
@@ -40,6 +52,38 @@ async def launch(message: Message):
         "Главное меню 👇\nИспользуйте кнопки для навигации.",
         reply_markup=main_menu
     )
+
+# --- Добавление задачи ---
+@dp.message(F.text == "➕ Добавить задачу")
+async def add_task_start(message: Message, state: FSMContext):
+    await state.set_state(TaskStates.waiting_for_task_text)
+    await message.answer("✍️ Введите текст задачи, которую нужно сохранить:")
+
+@dp.message(TaskStates.waiting_for_task_text)
+async def process_task_text(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    task_text = message.text
+    
+    if user_id not in user_tasks:
+        user_tasks[user_id] = []
+    
+    user_tasks[user_id].append(task_text)
+    
+    await state.clear()
+    await message.answer(f"✅ Задача сохранена: \"{task_text}\"", reply_markup=main_menu)
+
+# --- Список задач ---
+@dp.message(F.text == "📋 Мои задачи")
+@dp.message(Command("tasks"))
+async def show_tasks(message: Message):
+    user_id = message.from_user.id
+    tasks = user_tasks.get(user_id, [])
+    
+    if not tasks:
+        await message.answer("📭 У вас пока нет сохраненных задач.")
+    else:
+        tasks_list = "\n".join([f"{i+1}. {task}" for i, task in enumerate(tasks)])
+        await message.answer(f"📋 *Ваши задачи:*\n\n{tasks_list}", parse_mode="Markdown")
 
 # --- Расписание ---
 @dp.message(F.text == "📅 Расписание")
