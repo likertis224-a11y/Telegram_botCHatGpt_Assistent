@@ -1,11 +1,13 @@
 
 import asyncio
+import os
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, FSInputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+from openai import OpenAI
 
 TOKEN = "8590754440:AAH4Xb_WuQVy2Z8a1oJEozpEtApByVtgxV8"
 
@@ -14,11 +16,19 @@ bot = Bot(token=TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
+# Инициализация OpenAI клиента через Replit AI Integrations
+# Не требует своего API ключа, оплата списывается с ваших кредитов Replit
+client = OpenAI(
+    base_url="https://api.replit.com/ai/v1",
+    api_key=os.environ.get("REPLIT_API_KEY"),
+)
+
 # Временное хранилище задач в памяти (в продакшене лучше БД)
 user_tasks = {}
 
 class TaskStates(StatesGroup):
     waiting_for_task_text = State()
+    waiting_for_ai_prompt = State()
 
 # --- Кнопки ---
 start_keyboard = ReplyKeyboardMarkup(
@@ -30,9 +40,9 @@ main_menu = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="📅 Расписание"), KeyboardButton(text="👤 Мой профиль")],
         [KeyboardButton(text="➕ Добавить задачу"), KeyboardButton(text="📋 Мои задачи")],
-        [KeyboardButton(text="🔗 Ссылки"), KeyboardButton(text="📝 Заметки")],
-        [KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")],
-        [KeyboardButton(text="🔄 В начало (/start)")]
+        [KeyboardButton(text="🤖 AI Помощник"), KeyboardButton(text="🔗 Ссылки")],
+        [KeyboardButton(text="📝 Заметки"), KeyboardButton(text="❓ FAQ")],
+        [KeyboardButton(text="📞 Контакты"), KeyboardButton(text="🔄 В начало (/start)")]
     ],
     resize_keyboard=True
 )
@@ -55,6 +65,33 @@ async def launch(message: Message):
         "Главное меню 👇\nИспользуйте кнопки для навигации.",
         reply_markup=main_menu
     )
+
+# --- AI Помощник ---
+@dp.message(F.text == "🤖 AI Помощник")
+@dp.message(Command("ai"))
+async def ai_start(message: Message, state: FSMContext):
+    await state.set_state(TaskStates.waiting_for_ai_prompt)
+    await message.answer("🤖 Я готов помочь! Введите ваш вопрос или промпт для ChatGPT:")
+
+@dp.message(TaskStates.waiting_for_ai_prompt)
+async def process_ai_prompt(message: Message, state: FSMContext):
+    prompt = message.text
+    msg = await message.answer("⌛ Думаю...")
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Ты полезный ассистент для студента."},
+                {"role": "user", "content": prompt}
+            ],
+        )
+        answer = response.choices[0].message.content
+        await msg.edit_text(answer)
+    except Exception as e:
+        await msg.edit_text(f"❌ Произошла ошибка при обращении к AI: {str(e)}")
+    
+    await state.clear()
 
 # --- Добавление задачи ---
 @dp.message(F.text == "➕ Добавить задачу")
