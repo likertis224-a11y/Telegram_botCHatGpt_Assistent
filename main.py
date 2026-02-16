@@ -31,17 +31,20 @@ main_menu = ReplyKeyboardMarkup(
         [KeyboardButton(text="📅 Расписание"), KeyboardButton(text="👤 Мой профиль")],
         [KeyboardButton(text="➕ Добавить задачу"), KeyboardButton(text="📋 Мои задачи")],
         [KeyboardButton(text="🔗 Ссылки"), KeyboardButton(text="📝 Заметки")],
-        [KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")]
+        [KeyboardButton(text="❓ FAQ"), KeyboardButton(text="📞 Контакты")],
+        [KeyboardButton(text="🔄 В начало (/start)")]
     ],
     resize_keyboard=True
 )
 
 # --- Команда /start ---
+@dp.message(F.text == "🔄 В начало (/start)")
 @dp.message(Command("start"))
-async def start(message: Message):
+async def start(message: Message, state: FSMContext):
+    await state.clear()
     await message.answer(
-        "👋 Привет! Я твой помощник.\nНажмите «Запуск», чтобы открыть меню!",
-        reply_markup=start_keyboard
+        "👋 Привет! Я твой помощник.\nИспользуйте меню ниже для навигации.",
+        reply_markup=main_menu
     )
 
 # --- Запуск ---
